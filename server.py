@@ -1,24 +1,28 @@
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import os
+import google.generativeai as genai
 
 # Load environment variables from the .env file
 load_dotenv()
 app = Flask(__name__)
 
 
-@app.route("/api/chat-completion/palm2", methods=["POST"])
+@app.route("/api/chat-completion/gemini", methods=["POST"])
 def get_data():
     try:
         # Get JSON data from the request
         json_data = request.get_json()
-        palm2_api_key =os.getenv("google_api_key")
-        print(palm2_api_key)
+        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
         # check if prompt
-        # Todo: Add the palm2 code here
+        # Todo: Add the gemini code here
+        # Set up the model
+        model = genai.GenerativeModel(model_name="gemini-pro",)
         if "prompt" in json_data:
-            # Return the received JSON data in the response
-            return jsonify(json_data)
+            prompt = json_data["prompt"]
+            response = model.generate_content(prompt)
+            # Now return the response text in JSON format
+            return jsonify({"response": response.text})
         else:
             # If 'prompt' key is missing, return an error message
             return jsonify({"error": 'Invalid JSON format. Missing "prompt" key.'}), 400
