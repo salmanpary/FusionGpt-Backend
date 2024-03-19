@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 import google.generativeai as genai #for gemini
 import requests #for bart
+import replicate #for llama2
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -55,24 +56,33 @@ def get_data1():
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 
+#llama2 code
+
+os.environ['REPLICATE_API_TOKEN'] = ""
 @app.route("/api/chat-completion/llama2", methods=["POST"])
+
 def get_data2():
+    # Ensure the input is in JSON format and contains the prompt
+    if not request.json or 'prompt' not in request.json:
+        return jsonify({"error": "Request must be JSON and contain a 'prompt' field"}), 400
+
+    prompt = request.json['prompt']
     try:
-        # Get JSON data from the request
-        json_data = request.get_json()
+        # Call the Replicate API with the LLaMA model and the prompt from the request
+        output = replicate.run(
+            "meta/llama-2-70b-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3",
+            input={
+                "prompt": prompt
+            }
+        )
+        
+        # Collecting output from the iterator
+        output_text = "".join([item for item in output])
 
-        # check if prompt
-        # Todo: Add the palm2 code here
-        if "prompt" in json_data:
-            # Return the received JSON data in the response
-            return jsonify(json_data)
-        else:
-            # If 'prompt' key is missing, return an error message
-            return jsonify({"error": 'Invalid JSON format. Missing "prompt" key.'}), 400
-
+        return jsonify({"response": output_text})
     except Exception as e:
-        # Return an error message if any exception occurs
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
+#llama2 code end 
 
 #bart code
 BART_API_TOKEN = " - "
