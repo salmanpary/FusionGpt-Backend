@@ -86,8 +86,8 @@ def login_user():
 
 
 # Endpoint to get all users if authenticated
-@app.route('/users', methods=['GET'])
-def get_all_users():
+@app.route('/getuser', methods=['GET'])
+def get_user():
     # Get JWT token from request headers
     token = request.headers.get('Authorization')
     if not token:
@@ -95,26 +95,25 @@ def get_all_users():
 
     # Decode and verify JWT token
     decoded_token = decode_jwt_token(token)
-    print(decoded_token)
     if not decoded_token:
         return jsonify({'message': 'Invalid token'}), 401
 
-    # Get all users from the database
-    select_all_users_sql = "SELECT * FROM users"
-    cursor.execute(select_all_users_sql)
-    users = cursor.fetchall()
+    # Extract user ID from decoded token
+    user_id = decoded_token.get('id')
 
-    # Convert users to a list of dictionaries
-    users_list = []
-    for user in users:
-        user_dict = {
-            'id': user[0],
-            'username': user[1],
-            'email': user[2]
-        }
-        users_list.append(user_dict)
+    # Fetch user's name from the database based on user ID
+    select_user_name_sql = "SELECT username FROM users WHERE id = %s"
+    cursor.execute(select_user_name_sql, (user_id,))
+    user_name_result = cursor.fetchone()
 
-    return jsonify({'users': users_list}), 200
+    if not user_name_result:
+        return jsonify({'message': 'User not found'}), 404
+
+    user_name = user_name_result[0]
+
+    return jsonify({'user_name': user_name}), 200
+
+
 @app.route("/chat/getmessage/openai", methods=["GET"])
 def get_user_chat_history():
     # Get JWT token from request headers
