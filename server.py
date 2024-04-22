@@ -6,14 +6,17 @@ import jwt
 from openai import OpenAI
 from db import mydb,cursor
 from flask_cors import CORS
+import google.generativeai as genai
+import replicate
+import requests
 
 load_dotenv()
 
 jwt_secret = os.getenv('jwt_secret')
 openai_api_key = os.getenv('openai_api_key')
 google_api_key = os.getenv('google_api_key')
-
-
+replicate_api_token = os.getenv('replicate_api_token')
+bart_api_token=os.getenv('bart_api_token')
 # Function to hash a password using SHA-256
 def hash_password(password):
     password_bytes = password.encode('utf-8')
@@ -158,7 +161,6 @@ def get_user_chat_history():
 
     # Get the AI model name from the query parameters
     ai_model = request.args.get('model_name')
-    print(ai_model)
     if not ai_model:
         return jsonify({'message': 'AI model name is required as query parameter'}), 400
 
@@ -217,7 +219,37 @@ def openai_chat():
         query = messages[-1]['content']  # Assuming the last message is the user's query
         response_content = response.choices[0].message.content
     elif model_name == "palm2":
-        response_content = "I am a PALM model."
+        genai.configure(api_key=google_api_key)
+        model = genai.GenerativeModel(model_name="gemini-pro",)
+        print(model)
+        query = messages[-1]['content']
+        response = model.generate_content(query)
+        response_content = response['content']
+    elif model_name == "llama2":
+        os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
+        query = messages[-1]['content']
+        output = replicate.run(
+            "meta/llama-2-70b-chat:02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3",
+            input={
+                "prompt":query
+            }
+        )
+        
+        # Collecting output from the iterator
+        output_text = "".join([item for item in output])
+        response_content = output_text
+    elif model_name=="bart":
+        query=messages[-1]['content']
+        api_url="https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
+        headers={"Authorization":f"Bearer {bart_api_token}"}
+        payload={"inputs":query}
+        response=requests.post(api_url,headers=headers,json=payload)
+        response_content=str(response.json()[0]["summary_text"])
+        
+        
+        
+        
+        
     
     # Insert the chat history into the database
     insert_chat_history_sql = """

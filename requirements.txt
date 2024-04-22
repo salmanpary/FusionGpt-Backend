@@ -5,3 +5,4 @@ PyJWT
 openai
 flask-cors
 google-generativeai
+replicate
