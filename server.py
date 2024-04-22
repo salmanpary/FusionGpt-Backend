@@ -157,7 +157,8 @@ def get_user_chat_history():
     user_id = decoded_token.get('id')
 
     # Get the AI model name from the query parameters
-    ai_model = request.args.get('ai_model')
+    ai_model = request.args.get('model_name')
+    print(ai_model)
     if not ai_model:
         return jsonify({'message': 'AI model name is required as query parameter'}), 400
 
@@ -189,7 +190,7 @@ def openai_chat():
     data = request.get_json()
     messages = data.get('messages')
     model_name = data.get('model_name')  # Get the model name from the request JSON
-    
+    print(model_name)
     if not model_name:
         return jsonify({'message': 'Model name is required'}), 400
     
@@ -208,7 +209,7 @@ def openai_chat():
             api_key=openai_api_key
         )
         response = client.chat.completions.create(
-            model=model_name,  # Use the provided model name here
+            model="gpt-3.5-turbo",  # Use the provided model name here
             messages=messages,
             temperature=0,
         )
