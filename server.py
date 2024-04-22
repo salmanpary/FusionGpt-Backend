@@ -11,6 +11,7 @@ load_dotenv()
 
 jwt_secret = os.getenv('jwt_secret')
 openai_api_key = os.getenv('openai_api_key')
+google_api_key = os.getenv('google_api_key')
 
 
 # Function to hash a password using SHA-256
@@ -114,7 +115,33 @@ def get_user():
     return jsonify({'user_name': user_name}), 200
 
 
-@app.route("/chat/getmessage/openai", methods=["GET"])
+def get_chat_history(user_id, model_id):
+    # Query the chat_history table for messages associated with the user ID and model ID, sorted by timestamp
+    select_user_chat_history_sql = """
+    SELECT query, answer FROM chat_history 
+    WHERE user_id = %s AND model_id = %s 
+    ORDER BY timestamp ASC
+    """
+    cursor.execute(select_user_chat_history_sql, (user_id, model_id))
+    user_chat_history = cursor.fetchall()
+
+    # Convert chat history to a list of dictionaries
+    chat_history_list = []
+    for message in user_chat_history:
+        message_dict1 = {
+            'role': 'user',
+            'content': message[0],
+        }
+        message_dict2 = {
+            'role': 'assistant',
+            'content': message[1],
+        }
+        chat_history_list.append(message_dict1)
+        chat_history_list.append(message_dict2)
+
+    return chat_history_list
+
+@app.route("/chat/getmessages", methods=["GET"])
 def get_user_chat_history():
     # Get JWT token from request headers
     token = request.headers.get('Authorization')
@@ -129,36 +156,28 @@ def get_user_chat_history():
     # Extract user ID from decoded token
     user_id = decoded_token.get('id')
 
-    # Fetch model ID from the models table (assuming the model ID is stored in the decoded token)
-    model_id = decoded_token.get('model_id')
+    # Get the AI model name from the query parameters
+    ai_model = request.args.get('ai_model')
+    if not ai_model:
+        return jsonify({'message': 'AI model name is required as query parameter'}), 400
 
-    # Query the chat_history table for messages associated with the user ID and model ID, sorted by timestamp
-    select_user_chat_history_sql = """
-    SELECT * FROM chat_history 
-    WHERE user_id = %s AND model_id = %s 
-    ORDER BY timestamp ASC
-    """
-    cursor.execute(select_user_chat_history_sql, (user_id, model_id))
-    user_chat_history = cursor.fetchall()
+    # Fetch model ID from the models table based on the model name
+    select_model_id_sql = "SELECT id FROM model WHERE model_name = %s"
+    cursor.execute(select_model_id_sql, (ai_model,))
+    model_id_result = cursor.fetchone()
 
-    # Convert chat history to a list of dictionaries
-    chat_history_list = []
-    for message in user_chat_history:
-        message_dict = {
-            'id': message[0],
-            'user_id': message[1],
-            'model_id': message[2],
-            'query': message[3],
-            'answer': message[4],
-            'timestamp': message[5].isoformat()  # Convert timestamp to ISO format for JSON serialization
-        }
-        chat_history_list.append(message_dict)
+    if not model_id_result:
+        return jsonify({'message': f'Model "{ai_model}" not found'}), 404
 
-    return jsonify({'chat_history': chat_history_list}), 200
+    model_id = model_id_result[0]
 
-    
-    
-@app.route('/chat/openai', methods=['POST'])
+    # Get chat history for the user and model
+    chat_history = get_chat_history(user_id, model_id)
+
+    return jsonify({'messages': chat_history}), 200
+
+
+@app.route('/chat', methods=['POST'])
 def openai_chat():
     token = request.headers.get('Authorization')
     if not token:
@@ -169,26 +188,47 @@ def openai_chat():
     
     data = request.get_json()
     messages = data.get('messages')
+    model_name = data.get('model_name')  # Get the model name from the request JSON
     
-    model="gpt-3.5-turbo"
-    client = OpenAI(
-        api_key=openai_api_key
-    )
-    response = client.chat.completions.create(
-    model=model,
-    messages=messages,
-    temperature=0,
-    )
-    query = messages[len(messages)-1]['content']
-    response= response.choices[0].message
+    if not model_name:
+        return jsonify({'message': 'Model name is required'}), 400
+    
+    # Use the provided model name to fetch the model ID from the database
+    select_model_id_sql = "SELECT id FROM model WHERE model_name = %s"
+    cursor.execute(select_model_id_sql, (model_name,))
+    model_id_result = cursor.fetchone()
+
+    if not model_id_result:
+        return jsonify({'message': f'Model "{model_name}" not found'}), 404
+
+    model_id = model_id_result[0]
+    if model_name == "openai":
+    # Use the provided model name for OpenAI chat
+        client = OpenAI(
+            api_key=openai_api_key
+        )
+        response = client.chat.completions.create(
+            model=model_name,  # Use the provided model name here
+            messages=messages,
+            temperature=0,
+        )
+        
+        query = messages[-1]['content']  # Assuming the last message is the user's query
+        response_content = response.choices[0].message.content
+    elif model_name == "palm2":
+        response_content = "I am a PALM model."
+    
+    # Insert the chat history into the database
     insert_chat_history_sql = """
-    insert into chat_history (user_id, model_id, query, answer) values (%s, %s, %s, %s)
+    INSERT INTO chat_history (user_id, model_id, query, answer) VALUES (%s, %s, %s, %s)
     """
-    cursor.execute(insert_chat_history_sql, (decoded_token.get('id'), 1, query, response.content))
-    messages.append({
-        'role': 'system',
-        'content': response.choices[0].message.content
-    })
-    return jsonify(messages)
+    cursor.execute(insert_chat_history_sql, (decoded_token.get('id'), model_id, query, response_content))
+    mydb.commit()
+    
+    # Get chat history for the user and model
+    chat_history = get_chat_history(decoded_token.get('id'), model_id)
+    
+    return jsonify({'messages': chat_history}), 200
+
 if __name__ == "__main__":
     app.run(debug=True)

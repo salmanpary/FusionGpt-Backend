@@ -29,4 +29,4 @@ else:
     )
 
 # Create cursor object
-cursor = mydb.cursor()
+cursor = mydb.cursor(buffered=True)

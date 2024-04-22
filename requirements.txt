@@ -4,3 +4,4 @@ mysql-connector-python
 PyJWT
 openai
 flask-cors
+google-generativeai
