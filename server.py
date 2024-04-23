@@ -17,6 +17,7 @@ openai_api_key = os.getenv('openai_api_key')
 google_api_key = os.getenv('google_api_key')
 replicate_api_token = os.getenv('replicate_api_token')
 bart_api_token=os.getenv('bart_api_token')
+stable_diffusion_url=os.getenv('stable_diffusion_url')
 # Function to hash a password using SHA-256
 def hash_password(password):
     password_bytes = password.encode('utf-8')
@@ -224,7 +225,7 @@ def openai_chat():
         print(model)
         query = messages[-1]['content']
         response = model.generate_content(query)
-        response_content = response['content']
+        response_content = response.text
     elif model_name == "llama2":
         os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
         query = messages[-1]['content']
@@ -262,6 +263,37 @@ def openai_chat():
     chat_history = get_chat_history(decoded_token.get('id'), model_id)
     
     return jsonify({'messages': chat_history}), 200
+@app.route('/generate-images', methods=['POST'])
+def generate_images():
+    # Get data from request
+    data = request.get_json()
+    prompt = data.get('prompt')
+    steps = 20
+    negative_prompt = data.get('negative_prompt')
+    batch_size = 2
+
+    # Validate required parameters
+    if not all([prompt, steps, negative_prompt, batch_size]):
+        return jsonify({'error': 'Missing required parameters'}), 400
+
+    # Call the external API to generate images
+    url = stable_diffusion_url
+    payload = {
+        "prompt": prompt,
+        "steps": steps,
+        "negative_prompt": negative_prompt,
+        "batch_size": batch_size,
+    }
+
+    try:
+        response = requests.post(url=url, json=payload)
+        if response.status_code == 200:
+            images = response.json().get("images", [])
+            return jsonify({'images': images}), 200
+        else:
+            return jsonify({'error': 'Failed to generate images'}), response.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': 'Failed to generate images'}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
