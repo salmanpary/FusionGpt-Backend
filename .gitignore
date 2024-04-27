@@ -1,3 +1,5 @@
 myenv
 .env
 __pycache__
+all_pdf_indexes
+uploads

@@ -9,6 +9,7 @@ from flask_cors import CORS
 import google.generativeai as genai
 import replicate
 import requests
+from index_pdf_document import index_pdf_documents,get_db
 
 load_dotenv()
 
@@ -263,8 +264,19 @@ def openai_chat():
     chat_history = get_chat_history(decoded_token.get('id'), model_id)
     
     return jsonify({'messages': chat_history}), 200
+    # Get data from request
 @app.route('/generate-images', methods=['POST'])
 def generate_images():
+    # Get JWT token from request headers
+    # token = request.headers.get('Authorization')
+    # if not token:
+    #     return jsonify({'message': 'No token provided'}), 401
+
+    # # Decode and verify JWT token
+    # decoded_token = decode_jwt_token(token)
+    # if not decoded_token:
+    #     return jsonify({'message': 'Invalid token'}), 401
+
     # Get data from request
     data = request.get_json()
     prompt = data.get('prompt')
@@ -291,9 +303,90 @@ def generate_images():
             images = response.json().get("images", [])
             return jsonify({'images': images}), 200
         else:
+            print(f"Failed to generate images: {response.text}")
             return jsonify({'error': 'Failed to generate images'}), response.status_code
     except requests.exceptions.RequestException as e:
+        print(f"Error generating images: {e}")
         return jsonify({'error': 'Failed to generate images'}), 500
 
+
+@app.route('/save-documents', methods=['POST'])
+def save_documents():
+    # Check if request contains files
+    UPLOAD_DIRECTORY = "uploads"
+
+    # Ensure the upload directory exists
+    if not os.path.exists(UPLOAD_DIRECTORY):
+        os.makedirs(UPLOAD_DIRECTORY)
+        
+    # Check if session ID is provided in the request body
+    session_id = request.form.get('sessionId')
+    if not session_id:
+        return jsonify({'error': 'Session ID is missing in the request body'}), 400
+
+    if 'files[]' not in request.files:
+        return jsonify({'error': 'No files found in request'}), 400
+    
+    # Get the files
+    files = request.files.getlist('files[]')
+
+    # Iterate over the files
+    saved_files = []
+    file_names = []
+    for file in files:
+        # Check if the file has a valid filename
+        if file.filename == '':
+            continue
+        
+        # Save the file to the upload directory
+        file_path = os.path.join(UPLOAD_DIRECTORY, file.filename)
+        file.save(file_path)
+        
+        # Append the file path to the response
+        saved_files.append(file_path)
+        file_names.append(file.filename)
+    print(file_names)
+    # Call the function with session ID and PDF file names
+    index_pdf_documents(session_id, file_names)
+    return jsonify({'message': 'Files saved successfully', 'files': saved_files}), 200
+@app.route('/chat-with-ktu',methods=['POST'])
+def chat_with_ktu():
+    data=request.get_json()
+    session_id=data.get('session_id')
+    query=data.get('query')
+    print(session_id)
+    print(query)
+    db=get_db(session_id)
+    matches=db.similarity_search(query,k=5)
+    client = OpenAI(
+            api_key=openai_api_key
+        )
+    extra_context=""
+    for index,match in enumerate(matches):
+        extra_context+=f"Context {index+1}: {match.page_content}\n"
+    full_prompt=f"""
+    ---
+    question from user:
+    ---
+    {query}
+    ---
+    context:
+    ---
+    {extra_context}
+    """   
+    messages = [
+        {
+            "role":"system",
+            "content": "You will be given context from the top 5 most relevant pages from a document. specified after context: ,always use the context given to answer the question."
+        },
+        {"role": "user", "content": full_prompt},
+    ]
+    response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # Use the provided model name here
+            messages=messages,
+            temperature=0,
+        )
+        
+    return response.choices[0].message.content
 if __name__ == "__main__":
     app.run(debug=True)

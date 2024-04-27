@@ -6,3 +6,11 @@ openai
 flask-cors
 google-generativeai
 replicate
+langchain
+pypdf
+langchain-text-splitters
+langchain-community
+faiss-cpu
+langchain-openai
+tiktoken
+sentence-transformers
