@@ -264,41 +264,28 @@ def openai_chat():
     chat_history = get_chat_history(decoded_token.get('id'), model_id)
     
     return jsonify({'messages': chat_history}), 200
-    # Get data from request
+    
+
 @app.route('/generate-images', methods=['POST'])
 def generate_images():
-    # Get JWT token from request headers
-    # token = request.headers.get('Authorization')
-    # if not token:
-    #     return jsonify({'message': 'No token provided'}), 401
-
-    # # Decode and verify JWT token
-    # decoded_token = decode_jwt_token(token)
-    # if not decoded_token:
-    #     return jsonify({'message': 'Invalid token'}), 401
-
     # Get data from request
     data = request.get_json()
     prompt = data.get('prompt')
-    steps = 20
-    negative_prompt = data.get('negative_prompt')
-    batch_size = 2
-
-    # Validate required parameters
-    if not all([prompt, steps, negative_prompt, batch_size]):
-        return jsonify({'error': 'Missing required parameters'}), 400
-
-    # Call the external API to generate images
-    url = stable_diffusion_url
-    payload = {
+    
+    data = {
         "prompt": prompt,
-        "steps": steps,
-        "negative_prompt": negative_prompt,
-        "batch_size": batch_size,
+        "negative_prompt": prompt,
+        "batch_size": 2,
+        "steps": 20,
+        "width": 512,
+        "height": 512,
     }
-
+    
+    # Call the external API to generate images
+    url = "http://127.0.0.1:7860/sdapi/v1/txt2img"
+    
     try:
-        response = requests.post(url=url, json=payload)
+        response = requests.post(url=url, json=data)
         if response.status_code == 200:
             images = response.json().get("images", [])
             return jsonify({'images': images}), 200
@@ -308,6 +295,50 @@ def generate_images():
     except requests.exceptions.RequestException as e:
         print(f"Error generating images: {e}")
         return jsonify({'error': 'Failed to generate images'}), 500
+# @app.route('/generate-images', methods=['POST'])
+# def generate_images():
+#     # Get JWT token from request headers
+#     # token = request.headers.get('Authorization')
+#     # if not token:
+#     #     return jsonify({'message': 'No token provided'}), 401
+
+#     # # Decode and verify JWT token
+#     # decoded_token = decode_jwt_token(token)
+#     # if not decoded_token:
+#     #     return jsonify({'message': 'Invalid token'}), 401
+
+#     # Get data from request
+    
+#     data = request.get_json()
+#     prompt = data.get('prompt')
+#     steps = 20
+#     negative_prompt = data.get('negative_prompt')
+#     batch_size = 2
+
+#     # Validate required parameters
+#     if not all([prompt, steps, negative_prompt, batch_size]):
+#         return jsonify({'error': 'Missing required parameters'}), 400
+
+#     # Call the external API to generate images
+#     url = stable_diffusion_url
+#     payload = {
+#         "prompt": prompt,
+#         "steps": steps,
+#         "negative_prompt": negative_prompt,
+#         "batch_size": batch_size,
+#     }
+
+#     try:
+#         response = requests.post(url=url, json=payload)
+#         if response.status_code == 200:
+#             images = response.json().get("images", [])
+#             return jsonify({'images': images}), 200
+#         else:
+#             print(f"Failed to generate images: {response.text}")
+#             return jsonify({'error': 'Failed to generate images'}), response.status_code
+#     except requests.exceptions.RequestException as e:
+#         print(f"Error generating images: {e}")
+#         return jsonify({'error': 'Failed to generate images'}), 500
 
 
 @app.route('/save-documents', methods=['POST'])
